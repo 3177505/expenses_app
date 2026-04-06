@@ -1,0 +1,200 @@
+{
+  "schema_version": 1,
+  "jurisdiction": "CZ",
+  "legal_framework_cs": "Zákon č. 586/1992 Sb., o daních z příjmů (ZDP). Položky odpovídají běžnému členění nákladů uznatelných k základu daně podle § 24 ZDP, pokud souvisí s dosažením, zajištěním a udržením příjmů. Není závazný výčet MFČR — pro konkrétní případy (auto, reprezentace, paušály OSVČ) konzultujte zákon, vyhlášky nebo účetního.",
+  "disclaimer_cs": "Tento seznam je pomůckou pro evidenci a přípravu podkladů k DP, ne právní radou. Limity uznatelnosti (reprezentace, dary, odpisy, paušál vs. skutečné náklady) si ověřte k roku přiznání.",
+  "categories": [
+    {
+      "id": "material_supplies",
+      "label_cs": "Materiál, spotřeba a drobné zásoby",
+      "label_en": "Materials and consumables",
+      "zdp_ref_cs": "§ 24 ZDP — obecně náklady vynaložené na dosažení příjmů",
+      "examples_cs": "Filament, náhradní díly, obaly, drobný spotřební materiál",
+      "uco_hint_cs": "blíží se účtovým skupinám 5xx (materiál, spotřeba)"
+    },
+    {
+      "id": "goods_for_resale",
+      "label_cs": "Nákup zboží k přeprodeji",
+      "label_en": "Goods for resale",
+      "zdp_ref_cs": "§ 24 ZDP — náklady související s výnosem z prodeje zboží",
+      "examples_cs": "Velkoobchodní nákupy zboží, zásilky pro e-shop",
+      "uco_hint_cs": "5xx / zásoby zboží"
+    },
+    {
+      "id": "external_services",
+      "label_cs": "Služby (externí, řemeslné, údržba)",
+      "label_en": "External services",
+      "zdp_ref_cs": "§ 24 ZDP — náklady na služby související s výdělečnou činností",
+      "examples_cs": "Opravy, úklid provozovny, kurýr přepravující zboží zákazníkovi",
+      "uco_hint_cs": "5xx služby"
+    },
+    {
+      "id": "software_saas_it",
+      "label_cs": "Software, cloud, IT předplatné",
+      "label_en": "Software, SaaS, IT subscriptions",
+      "zdp_ref_cs": "§ 24 ZDP — náklady na SW a služby nutné pro činnost",
+      "examples_cs": "IDE, hosting, VPN, licence, AI nástroje (pokud pro podnikání)",
+      "uco_hint_cs": "518 / služby, příp. drobný majetek dle pravidel"
+    },
+    {
+      "id": "telecom_post",
+      "label_cs": "Telekomunikace, internet, poštovné",
+      "label_en": "Telecom, internet, postage",
+      "zdp_ref_cs": "§ 24 ZDP — náklady na spojení nutné pro činnost",
+      "examples_cs": "Mobilní tarif (podíl), pevná linka, datové služby, doporučené zásilky",
+      "uco_hint_cs": "518"
+    },
+    {
+      "id": "office_consumables",
+      "label_cs": "Kancelář — režijní drobnosti (tisk, papír, kancelářské potřeby)",
+      "label_en": "Office consumables",
+      "zdp_ref_cs": "§ 24 ZDP",
+      "examples_cs": "Tonery, sešity, drobné vybavení pod limit pro majetek",
+      "uco_hint_cs": "5xx"
+    },
+    {
+      "id": "rent_workspace",
+      "label_cs": "Nájemné pracovního / podnikatelského prostoru",
+      "label_en": "Workspace rent",
+      "zdp_ref_cs": "§ 24 ZDP — náklady na nájemné související s výkonem činnosti",
+      "examples_cs": "Nájem kanceláře, dílny; podíl nájmu při home office dle pravidel",
+      "uco_hint_cs": "5xx nájemné"
+    },
+    {
+      "id": "energy_utilities_business",
+      "label_cs": "Energie a služby spojené s výkonem činnosti (podíl)",
+      "label_en": "Energy and utilities (business share)",
+      "zdp_ref_cs": "§ 24 ZDP — při výkonu z místa podnikání / poměrný podíl",
+      "examples_cs": "Elektřina, plyn, vodné v poměru k výkonu činnosti",
+      "uco_hint_cs": "účtování často poměrným rozúčtováním"
+    },
+    {
+      "id": "travel_business",
+      "label_cs": "Cestovné (služební cesty, cestovní náhrady dle zákona)",
+      "label_en": "Business travel",
+      "zdp_ref_cs": "§ 24 ZDP + zákon č. 262/2006 Sb. / vyhlášky k cestovním náhradám",
+      "examples_cs": "Jízdenky, ubytování při služební cestě, náhrady dle pravidel",
+      "uco_hint_cs": "často 5xx / specifická evidence"
+    },
+    {
+      "id": "vehicle_operation",
+      "label_cs": "Provoz vozidla pro podnikání",
+      "label_en": "Vehicle for business",
+      "zdp_ref_cs": "§ 24 ZDP — palivo, servis, pojistné dle způsobu uplatnění (náklad / paušál km)",
+      "examples_cs": "PHM, servis, dálniční známka v poměru k výkonu činnosti",
+      "uco_hint_cs": "§ 34b cestovní výdajové paušály nebo skutečné náklady — zvolte jednu linii"
+    },
+    {
+      "id": "bank_payment_fees",
+      "label_cs": "Bankovní a platební poplatky",
+      "label_en": "Bank and payment fees",
+      "zdp_ref_cs": "§ 24 ZDP — poplatky související s podnikatelskými účty a platbami",
+      "examples_cs": "Poplatky za účet, za převod, za kartu, měnové konverze u podnikání",
+      "uco_hint_cs": "5xx finanční služby"
+    },
+    {
+      "id": "professional_advisory",
+      "label_cs": "Účetní, právní a daňové služby",
+      "label_en": "Accounting, legal, tax advisory",
+      "zdp_ref_cs": "§ 24 ZDP",
+      "examples_cs": "Účetnictví, daňové přiznání, právní konzultace k zakázkám",
+      "uco_hint_cs": "518 / odborné služby"
+    },
+    {
+      "id": "marketing_advertising",
+      "label_cs": "Reklama a marketing",
+      "label_en": "Advertising and marketing",
+      "zdp_ref_cs": "§ 24 ZDP",
+      "examples_cs": "Reklama online, tisk, vizitky, sponzoring (ověřte uznatelnost)",
+      "uco_hint_cs": "5xx"
+    },
+    {
+      "id": "training_related",
+      "label_cs": "Vzdělávání související s podnikáním",
+      "label_en": "Training related to business",
+      "zdp_ref_cs": "§ 24 ZDP — pokud přímá souvislost s výnosy činnosti",
+      "examples_cs": "Kurzy k oboru podnikání, certifikace potřebná pro zakázky",
+      "uco_hint_cs": "5xx — ne všeobecná rekvalifikace bez souvislosti"
+    },
+    {
+      "id": "insurance_business",
+      "label_cs": "Pojištění vztahující se k podnikání",
+      "label_en": "Business-related insurance",
+      "zdp_ref_cs": "§ 24 ZDP",
+      "examples_cs": "Pojištění odpovědnosti podnikatele, vybavení dílny, pojištění vozidla pracovního",
+      "uco_hint_cs": "5xx"
+    },
+    {
+      "id": "memberships_fees",
+      "label_cs": "Členství, předplatné odborných médií (souvislost s činností)",
+      "label_en": "Memberships and professional subscriptions",
+      "zdp_ref_cs": "§ 24 ZDP — pokud souvisí s výkonem činnosti",
+      "examples_cs": "Členství v komoře, odborné časopisy pro obor",
+      "uco_hint_cs": "518"
+    },
+    {
+      "id": "representation",
+      "label_cs": "Reprezentace",
+      "label_en": "Representation / client entertainment",
+      "zdp_ref_cs": "§ 25 ZDP — omezená uznatelnost; část nákladů nemusí být uznatelná",
+      "examples_cs": "Občerstvení u obchodního partnera dle pravidel reprezentace",
+      "uco_hint_cs": "ověřte procenta a dokladování — často částečně neuznatelné"
+    },
+    {
+      "id": "meals_hospitality_limited",
+      "label_cs": "Občerstvení a pohostinnost (často s omezením uznatelnosti)",
+      "label_en": "Meals and hospitality (often limited)",
+      "zdp_ref_cs": "ZDP — část může spadat pod reprezentaci nebo neuznatelné; individuálně",
+      "examples_cs": "Pracovní oběd bez splnění podmínek reprezentace",
+      "uco_hint_cs": "konzultace s účetním"
+    },
+    {
+      "id": "depreciation_assets",
+      "label_cs": "Odpisy majetku (dlouhodobý majetek)",
+      "label_en": "Depreciation",
+      "zdp_ref_cs": "ZDP — odpisování dle zákona a metody; majetek nad limity",
+      "examples_cs": "Pořízení vybavení nad limitem pro okamžitý náklad",
+      "uco_hint_cs": "02x / 06x — účetní metody"
+    },
+    {
+      "id": "interest_financing",
+      "label_cs": "Úroky z úvěrů uznaných jako náklad",
+      "label_en": "Interest on eligible loans",
+      "zdp_ref_cs": "§ 24 ZDP — za splnění podmínek",
+      "examples_cs": "Úroky z úvěru na provoz podnikání (ne splátka jistiny)",
+      "uco_hint_cs": "562 / finanční náklady"
+    },
+    {
+      "id": "admin_state_fees",
+      "label_cs": "Správní a soudní poplatky (související s činností)",
+      "label_en": "Administrative and court fees",
+      "zdp_ref_cs": "§ 24 ZDP — pokud souvisí s výkonem činnosti",
+      "examples_cs": "Poplatek za živnostenské listy související s podnikáním, soudní poplatek v obchodní věci",
+      "uco_hint_cs": "5xx"
+    },
+    {
+      "id": "taxes_deductible_fees",
+      "label_cs": "Daně a pojistné sociální zdravotní (u zaměstnavatele / OSVČ odvody dle režimu)",
+      "label_en": "Taxes and mandatory contributions (context-dependent)",
+      "zdp_ref_cs": "Různé § — sociální a zdravotní povinně odvádané z podnikání",
+      "examples_cs": "Sociální a zdravotní jako výdaj OSVČ při reálných nákladech",
+      "uco_hint_cs": "záleží na režimu výdajů (paušál vs. skutečné)"
+    },
+    {
+      "id": "other_deductible",
+      "label_cs": "Ostatní uznatelné náklady (§ 24)",
+      "label_en": "Other deductible expenses",
+      "zdp_ref_cs": "§ 24 ZDP — ostatní prokazatelné náklady na dosažení příjmů",
+      "examples_cs": "Jednorázové položky, které nezapadají jinam, při přímé souvislosti",
+      "uco_hint_cs": "záložní kategorie"
+    },
+    {
+      "id": "private_non_deductible",
+      "label_cs": "Soukromé / pravděpodobně neuznatelné (pouze evidence)",
+      "label_en": "Private / likely non-deductible (tracking only)",
+      "zdp_ref_cs": "Nejde o nárok na odpočet — kvůli přehledu a oddělení od podnikání",
+      "examples_cs": "Soukromé nákupy bez souvislosti s výnosem",
+      "uco_hint_cs": "nepatří do výdajů ZDP — odděleně od podnikání"
+    }
+  ]
+}
