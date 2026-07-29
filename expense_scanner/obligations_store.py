@@ -34,8 +34,7 @@ INSURANCE_KINDS = frozenset({"health", "sickness", "pension"})
 PRESETS: List[Dict[str, Any]] = [
     {"kind": "health", "default_amount": 3306.0, "currency": "CZK"},
     {"kind": "sickness", "default_amount": 243.0, "currency": "CZK"},
-    {"kind": "pension", "default_amount": 5720.0, "currency": "CZK"},
-    {"kind": "vat_summary", "default_amount": 0.0, "currency": "CZK"},
+    {"kind": "pension", "default_amount": 5005.0, "currency": "CZK"},
 ]
 
 
@@ -396,72 +395,6 @@ def _manual_unpaid_schedule_slots(entries: List[Dict[str, Any]]) -> Set[Tuple[st
     return out
 
 
-def _date_to_quarter(iso_date: str) -> Tuple[int, int]:
-    y, m, _ = map(int, iso_date.split("-"))
-    q = (m - 1) // 3 + 1
-    return y, q
-
-
-def _quarter_key(y: int, q: int) -> str:
-    return f"{y}-Q{q}"
-
-
-def _quarter_due_date(y: int, q: int) -> str:
-    if q == 1:
-        return f"{y}-04-25"
-    if q == 2:
-        return f"{y}-07-25"
-    if q == 3:
-        return f"{y}-10-25"
-    return f"{y + 1}-01-25"
-
-
-def _iter_quarters_inclusive(
-    y1: int, q1: int, y2: int, q2: int
-) -> List[Tuple[int, int]]:
-    if (y1, q1) > (y2, q2):
-        return []
-    out: List[Tuple[int, int]] = []
-    y, q = y1, q1
-    while (y, q) <= (y2, q2):
-        out.append((y, q))
-        if q == 4:
-            q = 1
-            y += 1
-        else:
-            q += 1
-    return out
-
-
-def _synthetic_vat_summary(meta: Dict[str, Any], today: str) -> List[Dict[str, Any]]:
-    if not meta.get("vat_identified"):
-        return []
-    vf = meta.get("vat_identified_from")
-    if not isinstance(vf, str) or not _DATE.match(vf):
-        return []
-    y1, q1 = _date_to_quarter(vf)
-    y2, q2 = _date_to_quarter(today)
-    rows: List[Dict[str, Any]] = []
-    for y, q in _iter_quarters_inclusive(y1, q1, y2, q2):
-        qk = _quarter_key(y, q)
-        due = _quarter_due_date(y, q)
-        overdue = due < today
-        rows.append(
-            {
-                "id": None,
-                "synthetic": True,
-                "kind": "vat_summary",
-                "title": qk.replace("-Q", " Q"),
-                "period_month": qk,
-                "amount": _preset_amount("vat_summary"),
-                "currency": "CZK",
-                "due_date": due,
-                "overdue": overdue,
-            }
-        )
-    return rows
-
-
 def _synthetic_expectations(
     meta: Dict[str, Any], today: str
 ) -> List[Dict[str, Any]]:
@@ -507,9 +440,7 @@ def _merge_unpaid_list(
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, float]], float, int, int]:
     paid_slots = _paid_schedule_slots(entries)
     manual_slots = _manual_unpaid_schedule_slots(entries)
-    synthetics = _synthetic_expectations(meta, today) + _synthetic_vat_summary(
-        meta, today
-    )
+    synthetics = _synthetic_expectations(meta, today)
     synthetic_kept: List[Dict[str, Any]] = []
     unpaid_by: Dict[str, Dict[str, float]] = {}
     total_unpaid_czk = 0.0
@@ -535,6 +466,8 @@ def _merge_unpaid_list(
 
     for e in entries:
         if e.get("paid_date"):
+            continue
+        if str(e.get("kind") or "") == "vat_summary":
             continue
         ccy = str(e.get("currency") or "CZK").upper()
         kind = str(e.get("kind") or "other")

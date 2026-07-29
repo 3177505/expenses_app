@@ -33,8 +33,26 @@ _RE_TOTAL_EUR_GES = re.compile(
 _RE_TOTAL_EUR_SIMPLE = re.compile(
     r"(?is)(?:^|\n)Total\D{0,20}?([\d\s\u00a0.,]+)\s*€",
 )
-_SUPPLIER_ICO = "11923075"
-_SUPPLIER_VAT = "CZ9462153206"
+
+
+def _load_local_env() -> None:
+    path = Path(__file__).resolve().parent.parent / ".env"
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        s = line.strip()
+        if not s or s.startswith("#") or "=" not in s:
+            continue
+        key, _, val = s.partition("=")
+        key = key.strip()
+        val = val.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = val
+
+
+_load_local_env()
+_SUPPLIER_ICO = (os.environ.get("EXPENSE_SUPPLIER_ICO") or "").strip()
+_SUPPLIER_VAT = (os.environ.get("EXPENSE_SUPPLIER_VAT") or "").strip()
 
 
 def default_invoices_dir() -> str:

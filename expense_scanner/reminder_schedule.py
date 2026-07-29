@@ -1,50 +1,15 @@
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional
 
+from expense_scanner.invoice_store import kvd_income_counts_by_month, list_income_rows
 from expense_scanner.obligations_store import build_obligations_summary, get_meta
 
 
-def _kvd_due_iso(year: int, quarter: int) -> str:
-    if quarter == 1:
-        return f"{year}-04-25"
-    if quarter == 2:
-        return f"{year}-07-25"
-    if quarter == 3:
-        return f"{year}-10-25"
-    return f"{year + 1}-01-25"
-
-
-def _date_to_quarter(iso_date: str) -> Tuple[int, int]:
-    y, m, _ = map(int, iso_date.split("-"))
-    q = (m - 1) // 3 + 1
-    return y, q
-
-
-def _earliest_open_quarter(iso_today: str) -> Tuple[int, int]:
-    y, q = _date_to_quarter(iso_today)
-    while True:
-        if q > 1:
-            py, pq = y, q - 1
-        else:
-            py, pq = y - 1, 4
-        due = _kvd_due_iso(py, pq)
-        if due < iso_today:
-            break
-        y, q = py, pq
-    return y, q
-
-
-def _forward_quarters_from(y: int, q: int, count: int) -> List[Tuple[int, int]]:
-    out: List[Tuple[int, int]] = []
-    cy, cq = y, q
-    for _ in range(count):
-        out.append((cy, cq))
-        if cq == 4:
-            cq = 1
-            cy += 1
-        else:
-            cq += 1
-    return out
+def _kvd_due_for_month(ym: str) -> str:
+    y, m = map(int, ym.split("-"))
+    if m == 12:
+        return f"{y + 1}-01-25"
+    return f"{y}-{m + 1:02d}-25"
 
 
 def _slot_status(due: str, today: str) -> str:
@@ -55,7 +20,19 @@ def _slot_status(due: str, today: str) -> str:
     return "upcoming"
 
 
-def build_reminder_overview(output_dir: Path) -> Dict[str, Any]:
+def _ym_ok(ym: str) -> bool:
+    if len(ym) != 7 or ym[4] != "-":
+        return False
+    try:
+        y, m = int(ym[:4]), int(ym[5:7])
+    except ValueError:
+        return False
+    return 1 <= m <= 12 and y >= 2000
+
+
+def build_reminder_overview(
+    output_dir: Path, inbox_root: Optional[Path] = None
+) -> Dict[str, Any]:
     summary = build_obligations_summary(output_dir)
     meta = get_meta(output_dir)
     today = str(summary.get("as_of_date") or "")
@@ -64,53 +41,32 @@ def build_reminder_overview(output_dir: Path) -> Dict[str, Any]:
 
     vat_on = bool(meta.get("vat_identified"))
     vat_from = meta.get("vat_identified_from")
-    cy = int(today[:4]) if len(today) >= 4 else 0
+
+    income_rows = list_income_rows(output_dir).get("rows") or []
+    rc_by_month = kvd_income_counts_by_month(income_rows)
 
     kvd_rows: List[Dict[str, Any]] = []
-    if vat_on:
-        vf = (
-            vat_from[:10]
-            if isinstance(vat_from, str) and len(vat_from) >= 10
-            else today
+    for ym in sorted(rc_by_month.keys()):
+        if not _ym_ok(ym):
+            continue
+        if (
+            vat_on
+            and isinstance(vat_from, str)
+            and len(vat_from) >= 7
+            and ym < vat_from[:7]
+        ):
+            continue
+        due = _kvd_due_for_month(ym)
+        kvd_rows.append(
+            {
+                "period_key": ym,
+                "period_month": ym,
+                "period_month_from": ym,
+                "rc_count": rc_by_month[ym],
+                "due_date": due,
+                "status": _slot_status(due, today) if len(today) == 10 else "upcoming",
+            }
         )
-        yvf, qvf = _date_to_quarter(vf)
-        y0, q0 = _earliest_open_quarter(today)
-        if (y0, q0) < (yvf, qvf):
-            y0, q0 = yvf, qvf
-        for y, q in _forward_quarters_from(y0, q0, 8):
-            if (y, q) < (yvf, qvf):
-                continue
-            if y > cy:
-                break
-            if y != cy:
-                continue
-            q_start_m = (q - 1) * 3 + 1
-            due = _kvd_due_iso(y, q)
-            kvd_rows.append(
-                {
-                    "period_key": f"{y}-Q{q}",
-                    "calendar_quarter": q,
-                    "year": y,
-                    "period_month_from": f"{y:04d}-{q_start_m:02d}",
-                    "due_date": due,
-                    "status": _slot_status(due, today),
-                }
-            )
-    else:
-        for y in (cy,):
-            for q in range(1, 5):
-                q_start_m = (q - 1) * 3 + 1
-                due = _kvd_due_iso(y, q)
-                kvd_rows.append(
-                    {
-                        "period_key": f"{y}-Q{q}",
-                        "calendar_quarter": q,
-                        "year": y,
-                        "period_month_from": f"{y:04d}-{q_start_m:02d}",
-                        "due_date": due,
-                        "status": _slot_status(due, today),
-                    }
-                )
 
     unpaid = summary.get("unpaid") or {}
     raw_items = list(unpaid.get("items") or [])
@@ -149,6 +105,8 @@ def build_reminder_overview(output_dir: Path) -> Dict[str, Any]:
         "as_of_date": today,
         "vat_identified": vat_on,
         "vat_identified_from": vat_from,
+        "kvd_monthly": True,
+        "kvd_source": "income",
         "kvd_rows": kvd_rows,
         "obligation_reminders": obligation_reminders,
         "counts": summary.get("counts") or {},

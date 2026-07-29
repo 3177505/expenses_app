@@ -41,6 +41,52 @@ def _receipt_valuation_date(r: Dict[str, Any]) -> Optional[str]:
                 return s
     return None
 
+
+def expense_czk_totals_by_month(output_dir: Path) -> Dict[str, float]:
+    out: Dict[str, float] = {}
+    for path in list_month_data_files(output_dir):
+        if path.name in _OVERVIEW_SKIP_NAMES:
+            continue
+        data = load_json(path)
+        ym = str(data.get("year_month") or path.stem)
+        if len(ym) != 7 or ym[4] != "-" or ym == "unknown":
+            continue
+        month_sum = 0.0
+        for r in data.get("receipts") or []:
+            if not isinstance(r, dict):
+                continue
+            t = r.get("total")
+            ccy = r.get("currency")
+            if not isinstance(t, (int, float)) or not ccy:
+                continue
+            amt = _amount_in_czk(float(t), str(ccy), _receipt_valuation_date(r))
+            if amt is not None:
+                month_sum += float(amt)
+        if month_sum:
+            out[ym] = round(out.get(ym, 0.0) + month_sum, 2)
+
+    for trip in list_trips(output_dir):
+        eff = effective_trip_amounts(trip)
+        amt = eff["amount_total"]
+        tccy = eff["currency"]
+        if not isinstance(amt, (int, float)):
+            continue
+        vd_raw = trip.get("date_to") or trip.get("date_from")
+        vd: Optional[str] = None
+        ym: Optional[str] = None
+        if isinstance(vd_raw, str):
+            s = vd_raw.strip()
+            if _ISO_DATE.match(s):
+                vd = s
+                ym = s[:7]
+        if not ym:
+            continue
+        czk = _amount_in_czk(float(amt), str(tccy) if tccy else None, vd)
+        if czk is not None:
+            out[ym] = round(out.get(ym, 0.0) + float(czk), 2)
+    return out
+
+
 _OVERVIEW_SKIP_NAMES = frozenset(
     {
         "travel_allowances.json",
@@ -48,6 +94,9 @@ _OVERVIEW_SKIP_NAMES = frozenset(
         "merchant_category_rules.json",
         "obligations.json",
         "obligations_summary.json",
+        "tax_rc_review.json",
+        "income_invoices.json",
+        "income_quarterly_foreign.json",
     }
 )
 

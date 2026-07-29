@@ -20,6 +20,7 @@ from expense_scanner.cz_stravne import (
     suggest_foreign_meal_allowance,
 )
 from expense_scanner.invoice_store import (
+    build_monthly_approx_summary,
     list_income_rows,
     patch_row,
     resolve_path_for_id,
@@ -38,11 +39,12 @@ from expense_scanner.obligations_store import (
     set_meta_fields as set_obl_meta_fields,
     update_entry as update_obl_entry,
 )
-from expense_scanner.overview_data import build_overview
+from expense_scanner.overview_data import build_overview, expense_czk_totals_by_month
 from expense_scanner.vat_refresh import refresh_vat_from_source_files
 from expense_scanner.pipeline import process_inbox
 from expense_scanner.reminder_schedule import build_reminder_overview
 from expense_scanner.receipt_search import search_receipts
+from expense_scanner.tax_rc_review import build_tax_rc_review, set_dismissed_receipt_id
 from expense_scanner.travel_store import (
     add_trip,
     delete_trip,
@@ -75,6 +77,7 @@ from expense_scanner.web_i18n import (
     reminders_i18n_json,
     search_i18n_json,
     tax_i18n_json,
+    tax_rc_i18n_json,
     travel_i18n_json,
     tr,
 )
@@ -332,6 +335,11 @@ class DuplicateRemoveBody(BaseModel):
     remove_ids: List[str]
 
 
+class TaxRcDismissBody(BaseModel):
+    receipt_id: str
+    dismissed: bool = True
+
+
 class TripCreateBody(BaseModel):
     purpose: str = ""
     country_code: str = ""
@@ -386,6 +394,8 @@ class IncomeRowPatchBody(BaseModel):
     paid: bool = False
     paid_month: Optional[str] = None
     payment_date: Optional[str] = None
+    client_dic: Optional[str] = None
+    client_vat: Optional[str] = None
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -928,6 +938,145 @@ def tax_html(lang: str, np: str) -> str:
 </html>
 """
 )
+
+
+def tax_rc_html(lang: str, np: str) -> str:
+    L = lambda k: tr(lang, k)
+    ha = html_lang_attr(lang)
+    rj = tax_rc_i18n_json(lang)
+    return (
+        """<!DOCTYPE html>
+<html lang="""
+        + ha
+        + """>
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>"""
+        + html.escape(L("rc.title"))
+        + """</title>
+    """
+        + APP_SHELL_CSS
+        + """
+    <style>
+      .travel-main table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-top: var(--gap); background: var(--card); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+      .travel-main th, .travel-main td { text-align: left; padding: 0.5rem 0.65rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+      .travel-main th { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; background: var(--surface); }
+    </style>
+  </head>
+  <body>
+    """
+        + nav_html(lang, np)
+        + """
+    <main class="app-main travel-main">
+      <h1>"""
+        + html.escape(L("rc.h1"))
+        + """</h1>
+      <p class="lead">"""
+        + L("rc.lead")
+        + """</p>
+      <p id="rc_status" class="lead"></p>
+      <div id="rc_table"><p class="hint">…</p></div>
+      <div id="rc_dismissed_wrap" hidden>
+        <h2 id="rc_hidden_h2"></h2>
+        <div id="rc_dismissed"></div>
+      </div>
+    </main>
+    """
+        + NAV_HIGHLIGHT_SCRIPT
+        + """
+    <script>
+      const RC = """
+        + rj
+        + """;
+    function esc(s) {
+      if (s == null) return "";
+      return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+    function escAttr(s) {
+      if (s == null) return "";
+      return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+    }
+    function buildRcTableBody(rows, isHidden) {
+      let h = "<table><thead><tr>";
+      h += "<th>" + esc(RC.thDate) + "</th><th>" + esc(RC.thMerch) + "</th><th>" + esc(RC.thAmt) + "</th>";
+      h += "<th>" + esc(RC.thVat) + "</th><th>" + esc(RC.thKw) + "</th><th>" + esc(RC.thBucket) + "</th>";
+      h += "<th>" + esc(RC.thAction) + "</th><th></th></tr></thead><tbody>";
+      for (const row of rows) {
+        const rid = row.id;
+        const amt = (row.total != null && row.currency) ? (esc(row.currency) + " " + esc(String(row.total))) : "—";
+        const va = (row.vat_amount != null) ? esc(String(row.vat_amount)) : "—";
+        const vr = (row.vat_rate != null) ? esc(String(row.vat_rate)) + "%" : "—";
+        const kw = (row.pdf_keywords_matched && row.pdf_keywords_matched.length) ? esc(row.pdf_keywords_matched.join(", ")) : "—";
+        h += "<tr><td>" + esc(row.date || "—") + "</td><td>" + esc(row.merchant_hint || "—") + "</td>";
+        h += "<td>" + amt + "</td><td>" + va + " / " + vr + "</td>";
+        h += "<td><small>" + kw + "</small></td><td>" + esc(row.bucket_file || "") + "</td>";
+        if (isHidden) {
+          h += "<td><button type=\\"button\\" class=\\"btn-secondary\\" data-rc-restore=\\"" + escAttr(rid) + "\\">" + esc(RC.restore) + "</button></td>";
+        } else {
+          h += "<td><button type=\\"button\\" class=\\"btn-secondary\\" data-rc-dismiss=\\"" + escAttr(rid) + "\\">" + esc(RC.dismiss) + "</button></td>";
+        }
+        h += "<td><a href=\\"/api/receipts/" + encodeURIComponent(rid) + "/file\\" target=\\"_blank\\">" + esc(RC.open) + "</a></td></tr>";
+      }
+      h += "</tbody></table>";
+      return h;
+    }
+    const rcMain = document.querySelector(".travel-main");
+    if (rcMain && !rcMain.dataset.rcWired) {
+      rcMain.dataset.rcWired = "1";
+      rcMain.addEventListener("click", function(ev) {
+        const t = ev.target;
+        if (!t || !t.getAttribute) return;
+        const d1 = t.getAttribute("data-rc-dismiss");
+        if (d1) { ev.preventDefault(); doRcDismiss(d1, true); return; }
+        const d2 = t.getAttribute("data-rc-restore");
+        if (d2) { ev.preventDefault(); doRcDismiss(d2, false); }
+      });
+    }
+    async function doRcDismiss(receiptId, dismissed) {
+      const st = document.getElementById("rc_status");
+      st.textContent = "";
+      const r = await fetch("/api/tax-rc-review/dismiss", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ receipt_id: receiptId, dismissed: dismissed })
+      });
+      if (!r.ok) { st.textContent = RC.loadErr; return; }
+      await loadRc();
+    }
+    async function loadRc() {
+      const box = document.getElementById("rc_table");
+      const dbox = document.getElementById("rc_dismissed");
+      const dwrap = document.getElementById("rc_dismissed_wrap");
+      const h2el = document.getElementById("rc_hidden_h2");
+      const st = document.getElementById("rc_status");
+      st.textContent = "";
+      box.innerHTML = "<p class=\\"hint\\">…</p>";
+      dbox.innerHTML = "";
+      dwrap.hidden = true;
+      const r = await fetch("/api/tax-rc-review");
+      if (!r.ok) { box.innerHTML = "<p class=\\"hint\\">" + esc(RC.loadErr) + "</p>"; return; }
+      const j = await r.json();
+      const rows = j.rows || [];
+      const dis = j.dismissed_rows || [];
+      if (!rows.length && !dis.length) { box.innerHTML = "<p class=\\"hint\\">" + esc(RC.empty) + "</p>"; return; }
+      if (rows.length) {
+        box.innerHTML = buildRcTableBody(rows, false);
+      } else {
+        box.innerHTML = "<p class=\\"hint\\">" + esc(RC.emptyVisible) + "</p>";
+      }
+      if (dis.length) {
+        dwrap.hidden = false;
+        h2el.textContent = RC.hiddenH2;
+        dbox.innerHTML = buildRcTableBody(dis, true);
+      }
+    }
+    loadRc();
+    </script>
+  </body>
+</html>
+"""
+    )
 
 
 def overview_html(lang: str, np: str) -> str:
@@ -1801,6 +1950,23 @@ def income_html(lang: str, np: str) -> str:
   </div>
   <p id="income_status"></p>
   <div id="inv_table"><p class="hint">…</p></div>
+  <h2>"""
+        + html.escape(L("income.m.h2"))
+        + """</h2>
+  <p class="lead">"""
+        + L("income.m.lead")
+        + """</p>
+  <div id="inv_m"></div>
+  <h2>"""
+        + html.escape(L("income.q.h2"))
+        + """</h2>
+  <p class="lead">"""
+        + L("income.q.lead")
+        + """</p>
+  <p class="hint">"""
+        + L("income.q.json")
+        + """</p>
+  <div id="inv_q"></div>
   </main>
   """
         + NAV_HIGHLIGHT_SCRIPT
@@ -1814,22 +1980,117 @@ def income_html(lang: str, np: str) -> str:
       if (s == null) return "";
       return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
     }
-    function czCell(row) {
-      if ((row.country_hint || "").toUpperCase() !== "CZ") return "—";
-      if (row.client_dic) return esc(row.client_dic);
-      if (row.client_ico) return esc(II.icoPrefix + " " + row.client_ico);
-      return "—";
+    function dicInputValue(row) {
+      if (row.client_dic) return row.client_dic;
+      if ((row.country_hint || "").toUpperCase() === "CZ" && row.client_ico) return II.icoPrefix + " " + row.client_ico;
+      return "";
     }
-    function vatCell(row) {
-      if ((row.country_hint || "").toUpperCase() === "CZ") return "—";
-      return row.client_vat ? esc(row.client_vat) : "—";
+    function vatInputValue(row) {
+      return row.client_vat || "";
     }
-    async function saveRow(id, paid, paidMonth, payDate) {
+    function renderMonthly(ma) {
+      const box = document.getElementById("inv_m");
+      if (!box) return;
+      const months = (ma && ma.months) ? ma.months : [];
+      if (!months.length) {
+        box.innerHTML = "<p class=\\"hint\\">" + esc(II.mEmpty) + "</p>";
+        return;
+      }
+      let h = "<p class=\\"hint\\">" + esc(II.mSummary
+        .replace("{inc}", inf.format(ma.income_total_czk_paid || 0))
+        .replace("{n}", String(ma.month_count || 0))
+        .replace("{avg}", inf.format(ma.avg_income_czk || 0))
+        .replace("{exp}", inf.format(ma.expenses_total_czk || 0))
+        .replace("{net}", inf.format(ma.approx_net_total_czk != null ? ma.approx_net_total_czk : 0))) + "</p>";
+      h += "<table><thead><tr>";
+      h += "<th>" + esc(II.mThMonth) + "</th><th class=\\"num\\">" + esc(II.mThInc) + "</th>";
+      h += "<th class=\\"num\\">" + esc(II.mThExp) + "</th><th class=\\"num\\">" + esc(II.mThNet) + "</th>";
+      h += "</tr></thead><tbody>";
+      for (const m of months) {
+        h += "<tr><td>" + esc(m.year_month || "") + "</td>";
+        h += "<td class=\\"num\\">" + esc(inf.format(m.avg_income_czk || 0)) + "</td>";
+        h += "<td class=\\"num\\">" + esc(inf.format(m.expenses_czk || 0)) + "</td>";
+        h += "<td class=\\"num\\">" + esc(inf.format(m.approx_net_czk || 0)) + "</td></tr>";
+      }
+      h += "</tbody></table>";
+      box.innerHTML = h;
+    }
+    function fmtOrigTotals(totals) {
+      const keys = Object.keys(totals || {}).sort();
+      if (!keys.length) return "—";
+      return keys.map((k) => k + " " + inf.format(totals[k])).join(" + ");
+    }
+    function quarterTitle(y, q, un) {
+      if (un) return II.qUnassigned;
+      const pat = [II.qQ1, II.qQ2, II.qQ3, II.qQ4][q - 1];
+      return pat.replace("{year}", String(y));
+    }
+    function formatQLine(x) {
+      const no = x.invoice_number != null ? String(x.invoice_number) : "—";
+      const amt = x.amount != null ? String(x.amount) : "—";
+      const ccy = x.currency || "";
+      const czk = x.amount_czk != null ? inf.format(x.amount_czk) : "—";
+      const cnb = x.cnb_valuation_date || "—";
+      const pay = x.payment_date || x.paid_month || "—";
+      let s = II.qLine
+        .replace(/\{no\}/g, esc(no))
+        .replace(/\{amt\}/g, esc(amt))
+        .replace(/\{ccy\}/g, esc(ccy))
+        .replace(/\{czk\}/g, esc(czk))
+        .replace(/\{cnb\}/g, esc(cnb))
+        .replace(/\{pay\}/g, esc(pay));
+      if (x.id) {
+        s += " <a href=\\"/api/income-invoices/" + encodeURIComponent(x.id) + "/file\\" target=\\"_blank\\">" + esc(II.qPdf) + "</a>";
+      }
+      return s;
+    }
+    function renderQuarterly(qf) {
+      const box = document.getElementById("inv_q");
+      if (!box) return;
+      const sections = (qf && qf.sections) ? qf.sections : [];
+      if (!sections.length) {
+        box.innerHTML = "<p class=\\"hint\\">" + esc(II.qEmpty) + "</p>";
+        return;
+      }
+      let h = "";
+      for (const sec of sections) {
+        h += "<h3>" + esc(quarterTitle(sec.year, sec.quarter, sec.unassigned)) + "</h3>";
+        if (sec.groups.some((g) => g.has_czk_gap)) {
+          h += "<p class=\\"hint\\">" + esc(II.qGap) + "</p>";
+        }
+        h += "<table><thead><tr>";
+        h += "<th>" + esc(II.qThVat) + "</th><th>" + esc(II.qThName) + "</th><th>" + esc(II.qThN) + "</th>";
+        h += "<th>" + esc(II.qThOrig) + "</th><th class=\\"num\\">" + esc(II.qThCzk) + "</th><th>" + esc(II.qThNote) + "</th></tr></thead><tbody>";
+        for (const g of sec.groups) {
+          const vatCell = g.client_vat ? esc(g.client_vat) : esc(II.qNoVat);
+          h += "<tr><td>" + vatCell + "</td><td>" + esc(g.client_name) + "</td><td class=\\"num\\">" + esc(String(g.invoice_count)) + "</td>";
+          h += "<td>" + esc(fmtOrigTotals(g.totals_by_currency)) + "</td><td class=\\"num\\">" + esc(inf.format(g.total_czk)) + "</td><td><small>";
+          const lines = g.lines || [];
+          if (lines.length === 0) h += "—";
+          else if (lines.length === 1) h += formatQLine(lines[0]);
+          else {
+            h += "<ul>";
+            for (const x of lines) h += "<li>" + formatQLine(x) + "</li>";
+            h += "</ul>";
+          }
+          h += "</small></td></tr>";
+        }
+        h += "</tbody><tfoot><tr><td colspan=\\"4\\">" + esc(II.qTfoot) + "</td><td class=\\"num\\">" + esc(inf.format(sec.quarter_total_czk)) + "</td><td></td></tr></tfoot></table>";
+      }
+      box.innerHTML = h;
+    }
+    async function saveRow(id, paid, paidMonth, payDate, dic, vat) {
       const st = document.getElementById("income_status");
       const r = await fetch("/api/income-invoices/" + encodeURIComponent(id), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paid: paid, paid_month: paidMonth || null, payment_date: payDate || null }),
+        body: JSON.stringify({
+          paid: paid,
+          paid_month: paidMonth || null,
+          payment_date: payDate || null,
+          client_dic: dic,
+          client_vat: vat,
+        }),
       });
       if (!r.ok) { st.textContent = II.rowErr; return; }
       st.textContent = II.rowSaved;
@@ -1839,19 +2100,41 @@ def income_html(lang: str, np: str) -> str:
       const paidSel = tr.querySelector(".inv-paid");
       const pm = tr.querySelector(".inv-paid-m");
       const pdt = tr.querySelector(".inv-pay-d");
-      const sync = () => saveRow(row.id, paidSel.value === "1", pm.value || null, pdt.value || null);
+      const dic = tr.querySelector(".inv-dic");
+      const vat = tr.querySelector(".inv-vat");
+      const sync = () => saveRow(
+        row.id,
+        paidSel.value === "1",
+        pm.value || null,
+        pdt.value || null,
+        (dic && dic.value != null) ? String(dic.value).trim() : "",
+        (vat && vat.value != null) ? String(vat.value).trim() : ""
+      );
       paidSel.addEventListener("change", sync);
       pm.addEventListener("change", sync);
       pdt.addEventListener("change", sync);
+      if (dic) { dic.addEventListener("change", sync); }
+      if (vat) { vat.addEventListener("change", sync); }
     }
     async function loadTable() {
       const box = document.getElementById("inv_table");
       const st = document.getElementById("income_status");
+      const mbox = document.getElementById("inv_m");
+      const qbox = document.getElementById("inv_q");
       box.innerHTML = "<p class=\\"hint\\">" + esc(II.loadRows) + "</p>";
+      if (mbox) mbox.innerHTML = "<p class=\\"hint\\">" + esc(II.loadRows) + "</p>";
+      if (qbox) qbox.innerHTML = "<p class=\\"hint\\">" + esc(II.loadRows) + "</p>";
       const r = await fetch("/api/income-invoices");
-      if (!r.ok) { box.innerHTML = "<p class=\\"hint\\">" + esc(II.loadErr) + "</p>"; return; }
+      if (!r.ok) {
+        box.innerHTML = "<p class=\\"hint\\">" + esc(II.loadErr) + "</p>";
+        if (mbox) mbox.innerHTML = "<p class=\\"hint\\">" + esc(II.loadErr) + "</p>";
+        if (qbox) qbox.innerHTML = "<p class=\\"hint\\">" + esc(II.loadErr) + "</p>";
+        return;
+      }
       const j = await r.json();
       document.getElementById("inv_dir").value = j.invoices_dir || "";
+      if (mbox) renderMonthly(j.monthly_approx);
+      if (qbox) renderQuarterly(j.quarterly_foreign);
       const rows = j.rows || [];
       if (!rows.length) { box.innerHTML = "<p class=\\"hint\\">" + esc(II.empty) + "</p>"; return; }
       let h = "<table><thead><tr>";
@@ -1869,7 +2152,8 @@ def income_html(lang: str, np: str) -> str:
         h += "<tr><td>" + esc(row.invoice_number || "—") + err + "</td>";
         h += "<td>" + esc(row.client_name || "—") + "</td><td>" + esc(row.for_who || "—") + "</td>";
         h += "<td>" + esc(row.invoice_date || "—") + "</td><td>" + amt + "</td><td>" + esc(row.country_hint || "") + "</td>";
-        h += "<td>" + czCell(row) + "</td><td>" + vatCell(row) + "</td>";
+        h += "<td><input type=\\"text\\" class=\\"inv-dic\\" value=\\"" + esc(dicInputValue(row)) + "\\" autocomplete=\\"off\\"/></td>";
+        h += "<td><input type=\\"text\\" class=\\"inv-vat\\" value=\\"" + esc(vatInputValue(row)) + "\\" autocomplete=\\"off\\"/></td>";
         h += "<td><select class=\\"inv-paid\\" data-id=\\"" + esc(row.id) + "\\">";
         h += "<option value=\\"0\\"" + (row.paid ? "" : " selected") + ">" + esc(II.paidN) + "</option>";
         h += "<option value=\\"1\\"" + (row.paid ? " selected" : "") + ">" + esc(II.paidY) + "</option></select></td>";
@@ -2317,15 +2601,15 @@ def reminders_html(lang: str, np: str) -> str:
       return esc(RI.stUp);
     }
     function renderKvd(rows) {
-      if (!rows || !rows.length) return "<p class=\\"hint\\">—</p>";
+      if (!rows || !rows.length) return "<p class=\\"hint\\">" + esc(RI.kvdEmpty) + "</p>";
       let h = "<table><thead><tr>";
-      h += "<th>" + esc(RI.thQ) + "</th><th>" + esc(RI.thPeriod) + "</th><th>" + esc(RI.thDue) + "</th><th>" + esc(RI.thState) + "</th>";
+      h += "<th>" + esc(RI.thPeriod) + "</th><th>" + esc(RI.thRc) + "</th><th>" + esc(RI.thDue) + "</th><th>" + esc(RI.thState) + "</th>";
       h += "</tr></thead><tbody>";
       for (const r of rows) {
-        const qk = String(r.period_key || "").replace("-Q", " Q");
         const st = r.status || "";
         const badge = st === "past_due" ? " warn" : "";
-        h += "<tr><td>" + esc(qk) + "</td><td>" + esc(r.period_month_from || "") + "</td><td>" + fmtDateYmd(r.due_date) + "</td><td><span class=\\"rem-badge" + badge + "\\">" + stLab(st) + "</span></td></tr>";
+        const n = r.rc_count != null ? String(r.rc_count) : "—";
+        h += "<tr><td>" + esc(r.period_month || r.period_key || "") + "</td><td>" + esc(n) + "</td><td>" + fmtDateYmd(r.due_date) + "</td><td><span class=\\"rem-badge" + badge + "\\">" + stLab(st) + "</span></td></tr>";
       }
       h += "</tbody></table>";
       return h;
@@ -2355,11 +2639,7 @@ def reminders_html(lang: str, np: str) -> str:
       document.getElementById("rem_asof").textContent = RI.asOf + ": " + fmtDateYmd(d.as_of_date || "");
       document.getElementById("rem_obl_a").textContent = RI.oblLink;
       const note = document.getElementById("rem_kvd_note");
-      if (d.vat_identified) {
-        note.textContent = RI.kvdActive;
-      } else {
-        note.textContent = RI.kvdRefOnly;
-      }
+      note.innerHTML = RI.kvdActive + " <a href=\\"/income\\">" + esc(RI.kvdRcLink) + "</a>";
       document.getElementById("rem_kvd").innerHTML = renderKvd(d.kvd_rows || []);
       document.getElementById("rem_obl").innerHTML = renderObl(d.obligation_reminders || [], d.as_of_date || "");
     }
@@ -2545,10 +2825,7 @@ def obligations_html(lang: str, np: str) -> str:
         + """ (243)</option>
       <option value="pension">"""
         + html.escape(L("obl.kind.pension"))
-        + """ (5720)</option>
-      <option value="vat_summary">"""
-        + html.escape(L("obl.kind.vat_summary"))
-        + """ (0)</option>
+        + """ (5005)</option>
     </select></label>
     <label>"""
         + html.escape(L("obl.kind"))
@@ -2567,9 +2844,6 @@ def obligations_html(lang: str, np: str) -> str:
         + """</option>
       <option value="vat">"""
         + html.escape(L("obl.kind.vat"))
-        + """</option>
-      <option value="vat_summary">"""
-        + html.escape(L("obl.kind.vat_summary"))
         + """</option>
       <option value="fine">"""
         + html.escape(L("obl.kind.fine"))
@@ -2653,6 +2927,7 @@ def obligations_html(lang: str, np: str) -> str:
     const nf = new Intl.NumberFormat(OI.locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     let oblPresets = [];
     let oblAll = [];
+    let oblUnpaid = [];
     let oblFilter = "all";
 
     function esc(s) {
@@ -2674,10 +2949,150 @@ def obligations_html(lang: str, np: str) -> str:
       return esc(OI.badgeUnpaid);
     }
 
+    function paidControlsHtml(paidDate, idxAttr, idx) {
+      const pd = paidDate || "";
+      let h = "<label><input type=\\"checkbox\\" class=\\"obl-paid-cb\\" " + idxAttr + "=\\"" + esc(String(idx)) + "\\"";
+      if (pd) h += " checked";
+      h += "/> " + esc(OI.markPaid) + "</label> ";
+      h += "<input type=\\"date\\" class=\\"obl-paid-d\\" " + idxAttr + "=\\"" + esc(String(idx)) + "\\" value=\\"" + esc(pd) + "\\"/>";
+      return h;
+    }
+
+    function amtControlHtml(amount, currency, idxAttr, idx) {
+      const a = amount != null ? String(amount) : "";
+      return "<input type=\\"number\\" step=\\"any\\" class=\\"obl-amt\\" " + idxAttr + "=\\"" + esc(String(idx)) + "\\" value=\\"" + esc(a) + "\\"/> " + esc(currency || "");
+    }
+
+    function rowAmount(tr, fallback) {
+      const inp = tr ? tr.querySelector(".obl-amt") : null;
+      if (!inp || inp.value === "") return Number(fallback != null ? fallback : 0);
+      const n = Number(inp.value);
+      return Number.isFinite(n) ? n : Number(fallback != null ? fallback : 0);
+    }
+
+    async function persistEntry(body, editId, okMsg) {
+      let r;
+      if (editId) {
+        r = await fetch("/api/obligations/" + encodeURIComponent(editId), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+      } else {
+        r = await fetch("/api/obligations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+      }
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        oblStatus.textContent = OI.err + " " + r.status + " " + (j.detail || JSON.stringify(j));
+        return false;
+      }
+      oblStatus.textContent = okMsg || OI.saved;
+      await loadObl();
+      return true;
+    }
+
+    function baseBody(src, amount, paidDate) {
+      return {
+        kind: src.kind || "other",
+        title: src.title || null,
+        amount: Number(amount),
+        currency: src.currency || "CZK",
+        due_date: src.due_date || todayYmd(),
+        period_month: src.period_month || null,
+        notes: src.notes || null,
+        paid_date: paidDate
+      };
+    }
+
+    async function saveEntryPaid(entry, paidDate, tr) {
+      if (!entry || !entry.id) return;
+      const amt = rowAmount(tr, entry.amount);
+      const msg = paidDate ? OI.paidSaved : OI.paidCleared;
+      await persistEntry(baseBody(entry, amt, paidDate || null), entry.id, msg);
+    }
+
+    async function saveEntryAmount(entry, tr) {
+      if (!entry || !entry.id) return;
+      const amt = rowAmount(tr, entry.amount);
+      await persistEntry(baseBody(entry, amt, entry.paid_date || null), entry.id, OI.saved);
+    }
+
+    async function saveUnpaidPaid(it, paidDate, tr) {
+      if (!it) return;
+      const amt = rowAmount(tr, it.amount);
+      const pd = paidDate || null;
+      if (!pd) {
+        if (it.id) {
+          const e = oblAll.find((x) => x.id === it.id) || it;
+          await persistEntry(baseBody(e, amt, null), it.id, OI.paidCleared);
+        }
+        return;
+      }
+      if (it.id) {
+        const e = oblAll.find((x) => x.id === it.id) || it;
+        await persistEntry(baseBody(e, amt, pd), it.id, OI.paidSaved);
+        return;
+      }
+      await persistEntry(baseBody(it, amt, pd), null, OI.paidSaved);
+    }
+
+    async function saveUnpaidAmount(it, tr) {
+      if (!it) return;
+      const amt = rowAmount(tr, it.amount);
+      if (it.id) {
+        const e = oblAll.find((x) => x.id === it.id) || it;
+        await persistEntry(baseBody(e, amt, e.paid_date || null), it.id, OI.saved);
+        return;
+      }
+      await persistEntry(baseBody(it, amt, null), null, OI.saved);
+    }
+
+    function wireRowControls(root, items, onPaid, onAmount) {
+      root.querySelectorAll(".obl-paid-cb").forEach((cb) => {
+        cb.onchange = () => {
+          const idx = Number(cb.getAttribute("data-obl-i") || cb.getAttribute("data-obl-u"));
+          const it = items[idx];
+          const tr = cb.closest("tr");
+          const dt = tr ? tr.querySelector(".obl-paid-d") : null;
+          if (cb.checked) {
+            const v = (dt && dt.value) ? dt.value : todayYmd();
+            if (dt) dt.value = v;
+            onPaid(it, v, tr);
+          } else {
+            if (dt) dt.value = "";
+            onPaid(it, null, tr);
+          }
+        };
+      });
+      root.querySelectorAll(".obl-paid-d").forEach((dt) => {
+        dt.onchange = () => {
+          const idx = Number(dt.getAttribute("data-obl-i") || dt.getAttribute("data-obl-u"));
+          const it = items[idx];
+          const tr = dt.closest("tr");
+          const cb = tr ? tr.querySelector(".obl-paid-cb") : null;
+          const v = dt.value || null;
+          if (cb) cb.checked = !!v;
+          onPaid(it, v, tr);
+        };
+      });
+      root.querySelectorAll(".obl-amt").forEach((inp) => {
+        inp.onchange = () => {
+          const idx = Number(inp.getAttribute("data-obl-i") || inp.getAttribute("data-obl-u"));
+          const it = items[idx];
+          onAmount(it, inp.closest("tr"));
+        };
+      });
+    }
+
     function renderOverview(summary) {
       const box = document.getElementById("obl_overview");
       if (!summary) {
         box.innerHTML = "";
+        oblUnpaid = [];
         return;
       }
       const p = summary.paid || {};
@@ -2700,19 +3115,21 @@ def obligations_html(lang: str, np: str) -> str:
         h += "<p class=\\"hint\\"><small>" + esc(OI.ovAsOf) + " " + esc(summary.as_of_date) + "</small></p>";
       }
       const items = u.items || [];
+      oblUnpaid = items;
       if (!items.length) {
         h += "<p class=\\"hint\\">" + esc(OI.ovNoneUnpaid) + "</p>";
       } else {
-        h += "<p><strong>" + esc(OI.ovUnpaidTitle) + "</strong></p><table><thead><tr><th>" + esc(OI.thSynthetic) + "</th><th>" + esc(OI.thKind) + "</th><th>" + esc(OI.thTitle) + "</th><th>" + esc(OI.thAmt) + "</th><th>" + esc(OI.thDue) + "</th><th></th></tr></thead><tbody>";
-        for (const it of items) {
+        h += "<p><strong>" + esc(OI.ovUnpaidTitle) + "</strong></p><table><thead><tr><th>" + esc(OI.thSynthetic) + "</th><th>" + esc(OI.thKind) + "</th><th>" + esc(OI.thTitle) + "</th><th>" + esc(OI.thAmt) + "</th><th>" + esc(OI.thDue) + "</th><th>" + esc(OI.thPaid) + "</th></tr></thead><tbody>";
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
           const klab = OI.kinds[it.kind] || it.kind;
-          const badge = it.overdue ? esc(OI.badgeOverdue) : esc(OI.badgeUnpaid);
           const src = it.synthetic ? esc(OI.syntheticAuto) : esc(OI.syntheticYes);
-          h += "<tr><td>" + src + "</td><td>" + esc(klab) + "</td><td>" + esc(it.title || "—") + "</td><td>" + esc(nf.format(it.amount)) + " " + esc(it.currency || "") + "</td><td>" + esc(it.due_date || "") + "</td><td>" + badge + "</td></tr>";
+          h += "<tr><td>" + src + "</td><td>" + esc(klab) + "</td><td>" + esc(it.title || "—") + "</td><td>" + amtControlHtml(it.amount, it.currency, "data-obl-u", i) + "</td><td>" + esc(it.due_date || "") + "</td><td>" + paidControlsHtml(null, "data-obl-u", i) + "</td></tr>";
         }
         h += "</tbody></table>";
       }
       box.innerHTML = h;
+      wireRowControls(box, oblUnpaid, saveUnpaidPaid, saveUnpaidAmount);
     }
 
     function renderSummary(summary) {
@@ -2751,18 +3168,19 @@ def obligations_html(lang: str, np: str) -> str:
         return;
       }
       let h = "<table><thead><tr><th></th><th>" + esc(OI.thKind) + "</th><th>" + esc(OI.thTitle) + "</th><th>" + esc(OI.thAmt) + "</th><th>" + esc(OI.thPeriod) + "</th><th>" + esc(OI.thDue) + "</th><th>" + esc(OI.thPaid) + "</th><th>" + esc(OI.thNotes) + "</th><th></th></tr></thead><tbody>";
-      for (const e of rows) {
+      for (let i = 0; i < rows.length; i++) {
+        const e = rows[i];
         const klab = OI.kinds[e.kind] || e.kind;
         const tit = esc(e.title || "");
-        const amt = e.amount != null ? nf.format(e.amount) + " " + esc(e.currency || "") : "—";
         const notes = esc((e.notes || "").slice(0, 80)) + ((e.notes || "").length > 80 ? "…" : "");
         const pm = e.period_month ? esc(e.period_month) : "—";
-        h += "<tr><td>" + rowBadge(e) + "</td><td>" + esc(klab) + "</td><td>" + tit + "</td><td>" + esc(amt) + "</td><td>" + pm + "</td><td>" + esc(e.due_date || "") + "</td><td>" + esc(e.paid_date || "—") + "</td><td><small>" + notes + "</small></td><td><button type=\\"button\\" data-obl-edit=\\"" + esc(e.id) + "\\">" + esc(OI.edit) + "</button> <button type=\\"button\\" data-obl-del=\\"" + esc(e.id) + "\\">" + esc(OI.del) + "</button></td></tr>";
+        h += "<tr><td>" + rowBadge(e) + "</td><td>" + esc(klab) + "</td><td>" + tit + "</td><td>" + amtControlHtml(e.amount, e.currency, "data-obl-i", i) + "</td><td>" + pm + "</td><td>" + esc(e.due_date || "") + "</td><td>" + paidControlsHtml(e.paid_date, "data-obl-i", i) + "</td><td><small>" + notes + "</small></td><td><button type=\\"button\\" data-obl-edit=\\"" + esc(e.id) + "\\">" + esc(OI.edit) + "</button> <button type=\\"button\\" data-obl-del=\\"" + esc(e.id) + "\\">" + esc(OI.del) + "</button></td></tr>";
       }
       h += "</tbody></table>";
       box.innerHTML = h;
       box.querySelectorAll("[data-obl-edit]").forEach((b) => { b.onclick = () => startOblEdit(b.dataset.oblEdit); });
       box.querySelectorAll("[data-obl-del]").forEach((b) => { b.onclick = () => delObl(b.dataset.oblDel); });
+      wireRowControls(box, rows, saveEntryPaid, saveEntryAmount);
     }
 
     function applyOblMeta(m) {
@@ -3117,6 +3535,26 @@ def tax_reference_page(request: Request) -> str:
     return tax_html(lang, _np(request))
 
 
+@app.get("/tax-rc", response_class=HTMLResponse)
+def tax_rc_page(request: Request) -> str:
+    lang = get_lang(request)
+    return tax_rc_html(lang, _np(request))
+
+
+@app.get("/api/tax-rc-review")
+def api_tax_rc_review(scan_pdf: bool = True) -> Dict[str, Any]:
+    return build_tax_rc_review(OUTPUT, ROOT, scan_pdf=scan_pdf)
+
+
+@app.put("/api/tax-rc-review/dismiss")
+def api_tax_rc_dismiss(body: TaxRcDismissBody) -> Dict[str, Any]:
+    try:
+        set_dismissed_receipt_id(OUTPUT, body.receipt_id, body.dismissed)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
+    return build_tax_rc_review(OUTPUT, ROOT, scan_pdf=True)
+
+
 @app.get("/api/tax-categories")
 def api_tax_categories() -> Dict[str, Any]:
     return load_tax_categories()
@@ -3304,12 +3742,17 @@ def api_overview() -> Dict[str, Any]:
 
 @app.get("/api/reminders")
 def api_reminders() -> Dict[str, Any]:
-    return build_reminder_overview(OUTPUT)
+    return build_reminder_overview(OUTPUT, ROOT)
 
 
 @app.get("/api/income-invoices")
 def api_income_invoices() -> Dict[str, Any]:
-    return list_income_rows(OUTPUT)
+    data = list_income_rows(OUTPUT)
+    data["monthly_approx"] = build_monthly_approx_summary(
+        data.get("rows") or [],
+        expense_czk_totals_by_month(OUTPUT),
+    )
+    return data
 
 
 @app.put("/api/income-invoices/dir")
@@ -3323,8 +3766,13 @@ def api_income_dir(body: IncomeDirBody) -> Dict[str, Any]:
 
 @app.put("/api/income-invoices/{iid}")
 def api_income_row_patch(iid: str, body: IncomeRowPatchBody) -> Dict[str, Any]:
+    kw: Dict[str, Any] = {}
+    if "client_dic" in body.model_fields_set:
+        kw["client_dic"] = body.client_dic
+    if "client_vat" in body.model_fields_set:
+        kw["client_vat"] = body.client_vat
     return patch_row(
-        OUTPUT, iid, body.paid, body.paid_month, body.payment_date
+        OUTPUT, iid, body.paid, body.paid_month, body.payment_date, **kw
     )
 
 
@@ -3405,3 +3853,9 @@ def api_receipt_file(rid: str):
 def api_process() -> dict:
     summary = process_inbox(ROOT, OUTPUT, ROOT / "_notReadable", recursive=False)
     return summary
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("web_app:app", host="127.0.0.1", port=8000, reload=True)

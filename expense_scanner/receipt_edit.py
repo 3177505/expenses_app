@@ -18,6 +18,8 @@ _NON_MONTH_JSON = frozenset(
         "income_invoices.json",
         "obligations.json",
         "obligations_summary.json",
+        "tax_rc_review.json",
+        "income_quarterly_foreign.json",
     }
 )
 _DATE_ISO_FULL = re.compile(r"^\d{4}-\d{2}-\d{2}$")
