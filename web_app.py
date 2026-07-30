@@ -396,6 +396,7 @@ class IncomeRowPatchBody(BaseModel):
     payment_date: Optional[str] = None
     client_dic: Optional[str] = None
     client_vat: Optional[str] = None
+    in_approx_selected: bool = False
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -1958,6 +1959,13 @@ def income_html(lang: str, np: str) -> str:
         + """</p>
   <div id="inv_m"></div>
   <h2>"""
+        + html.escape(L("income.m2.h2"))
+        + """</h2>
+  <p class="lead">"""
+        + L("income.m2.lead")
+        + """</p>
+  <div id="inv_m2"></div>
+  <h2>"""
         + html.escape(L("income.q.h2"))
         + """</h2>
   <p class="lead">"""
@@ -1988,12 +1996,12 @@ def income_html(lang: str, np: str) -> str:
     function vatInputValue(row) {
       return row.client_vat || "";
     }
-    function renderMonthly(ma) {
-      const box = document.getElementById("inv_m");
+    function renderMonthly(ma, boxId, emptyMsg) {
+      const box = document.getElementById(boxId || "inv_m");
       if (!box) return;
       const months = (ma && ma.months) ? ma.months : [];
       if (!months.length) {
-        box.innerHTML = "<p class=\\"hint\\">" + esc(II.mEmpty) + "</p>";
+        box.innerHTML = "<p class=\\"hint\\">" + esc(emptyMsg || II.mEmpty) + "</p>";
         return;
       }
       let h = "<p class=\\"hint\\">" + esc(II.mSummary
@@ -2079,7 +2087,7 @@ def income_html(lang: str, np: str) -> str:
       }
       box.innerHTML = h;
     }
-    async function saveRow(id, paid, paidMonth, payDate, dic, vat) {
+    async function saveRow(id, paid, paidMonth, payDate, dic, vat, inApprox) {
       const st = document.getElementById("income_status");
       const r = await fetch("/api/income-invoices/" + encodeURIComponent(id), {
         method: "PUT",
@@ -2090,6 +2098,7 @@ def income_html(lang: str, np: str) -> str:
           payment_date: payDate || null,
           client_dic: dic,
           client_vat: vat,
+          in_approx_selected: !!inApprox,
         }),
       });
       if (!r.ok) { st.textContent = II.rowErr; return; }
@@ -2102,38 +2111,45 @@ def income_html(lang: str, np: str) -> str:
       const pdt = tr.querySelector(".inv-pay-d");
       const dic = tr.querySelector(".inv-dic");
       const vat = tr.querySelector(".inv-vat");
+      const approx = tr.querySelector(".inv-approx2");
       const sync = () => saveRow(
         row.id,
         paidSel.value === "1",
         pm.value || null,
         pdt.value || null,
         (dic && dic.value != null) ? String(dic.value).trim() : "",
-        (vat && vat.value != null) ? String(vat.value).trim() : ""
+        (vat && vat.value != null) ? String(vat.value).trim() : "",
+        approx ? approx.checked : false
       );
       paidSel.addEventListener("change", sync);
       pm.addEventListener("change", sync);
       pdt.addEventListener("change", sync);
       if (dic) { dic.addEventListener("change", sync); }
       if (vat) { vat.addEventListener("change", sync); }
+      if (approx) { approx.addEventListener("change", sync); }
     }
     async function loadTable() {
       const box = document.getElementById("inv_table");
       const st = document.getElementById("income_status");
       const mbox = document.getElementById("inv_m");
+      const m2box = document.getElementById("inv_m2");
       const qbox = document.getElementById("inv_q");
       box.innerHTML = "<p class=\\"hint\\">" + esc(II.loadRows) + "</p>";
       if (mbox) mbox.innerHTML = "<p class=\\"hint\\">" + esc(II.loadRows) + "</p>";
+      if (m2box) m2box.innerHTML = "<p class=\\"hint\\">" + esc(II.loadRows) + "</p>";
       if (qbox) qbox.innerHTML = "<p class=\\"hint\\">" + esc(II.loadRows) + "</p>";
       const r = await fetch("/api/income-invoices");
       if (!r.ok) {
         box.innerHTML = "<p class=\\"hint\\">" + esc(II.loadErr) + "</p>";
         if (mbox) mbox.innerHTML = "<p class=\\"hint\\">" + esc(II.loadErr) + "</p>";
+        if (m2box) m2box.innerHTML = "<p class=\\"hint\\">" + esc(II.loadErr) + "</p>";
         if (qbox) qbox.innerHTML = "<p class=\\"hint\\">" + esc(II.loadErr) + "</p>";
         return;
       }
       const j = await r.json();
       document.getElementById("inv_dir").value = j.invoices_dir || "";
-      if (mbox) renderMonthly(j.monthly_approx);
+      if (mbox) renderMonthly(j.monthly_approx, "inv_m", II.mEmpty);
+      if (m2box) renderMonthly(j.monthly_approx_selected, "inv_m2", II.m2Empty);
       if (qbox) renderQuarterly(j.quarterly_foreign);
       const rows = j.rows || [];
       if (!rows.length) { box.innerHTML = "<p class=\\"hint\\">" + esc(II.empty) + "</p>"; return; }
@@ -2141,7 +2157,8 @@ def income_html(lang: str, np: str) -> str:
       h += "<th>" + esc(II.thNo) + "</th><th>" + esc(II.thClient) + "</th><th>" + esc(II.thFor) + "</th>";
       h += "<th>" + esc(II.thDate) + "</th><th>" + esc(II.thAmt) + "</th><th>" + esc(II.thCc) + "</th>";
       h += "<th>" + esc(II.thCz) + "</th><th>" + esc(II.thVat) + "</th>";
-      h += "<th>" + esc(II.thPaid) + "</th><th>" + esc(II.thPaidM) + "</th><th>" + esc(II.thPayDate) + "</th><th class=\\"num\\">" + esc(II.thCzk) + "</th><th>" + esc(II.thPdf) + "</th>";
+      h += "<th>" + esc(II.thPaid) + "</th><th>" + esc(II.thPaidM) + "</th><th>" + esc(II.thPayDate) + "</th><th class=\\"num\\">" + esc(II.thCzk) + "</th>";
+      h += "<th>" + esc(II.thApprox2) + "</th><th>" + esc(II.thPdf) + "</th>";
       h += "</tr></thead><tbody>";
       for (const row of rows) {
         const amt = (row.amount != null && row.currency) ? (esc(row.currency) + " " + esc(String(row.amount))) : "—";
@@ -2160,6 +2177,7 @@ def income_html(lang: str, np: str) -> str:
         h += "<td><input type=\\"month\\" class=\\"inv-paid-m\\" value=\\"" + esc(pmVal) + "\\"/></td>";
         h += "<td><input type=\\"date\\" class=\\"inv-pay-d\\" value=\\"" + esc(pdVal) + "\\"/></td>";
         h += "<td class=\\"num\\">" + esc(czkDisp) + "</td>";
+        h += "<td><input type=\\"checkbox\\" class=\\"inv-approx2\\"" + (row.in_approx_selected ? " checked" : "") + "/></td>";
         h += "<td><a href=\\"/api/income-invoices/" + encodeURIComponent(row.id) + "/file\\" target=\\"_blank\\">PDF</a></td></tr>";
       }
       h += "</tbody></table>";
@@ -3748,10 +3766,11 @@ def api_reminders() -> Dict[str, Any]:
 @app.get("/api/income-invoices")
 def api_income_invoices() -> Dict[str, Any]:
     data = list_income_rows(OUTPUT)
-    data["monthly_approx"] = build_monthly_approx_summary(
-        data.get("rows") or [],
-        expense_czk_totals_by_month(OUTPUT),
-    )
+    rows = data.get("rows") or []
+    exp_by_m = expense_czk_totals_by_month(OUTPUT)
+    data["monthly_approx"] = build_monthly_approx_summary(rows, exp_by_m)
+    selected = [r for r in rows if r.get("in_approx_selected")]
+    data["monthly_approx_selected"] = build_monthly_approx_summary(selected, exp_by_m)
     return data
 
 
@@ -3771,6 +3790,8 @@ def api_income_row_patch(iid: str, body: IncomeRowPatchBody) -> Dict[str, Any]:
         kw["client_dic"] = body.client_dic
     if "client_vat" in body.model_fields_set:
         kw["client_vat"] = body.client_vat
+    if "in_approx_selected" in body.model_fields_set:
+        kw["in_approx_selected"] = body.in_approx_selected
     return patch_row(
         OUTPUT, iid, body.paid, body.paid_month, body.payment_date, **kw
     )

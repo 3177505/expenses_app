@@ -127,6 +127,7 @@ def patch_row(
     *,
     client_dic: Any = _UNSET,
     client_vat: Any = _UNSET,
+    in_approx_selected: Any = _UNSET,
 ) -> Dict[str, Any]:
     state = load_income_state(output_dir)
     slot: Dict[str, Any] = dict(state["by_id"].get(row_id) or {})
@@ -147,6 +148,8 @@ def patch_row(
             slot.pop("client_vat", None)
         else:
             slot["client_vat"] = v
+    if in_approx_selected is not _UNSET:
+        slot["in_approx_selected"] = bool(in_approx_selected)
     state["by_id"][row_id] = slot
     save_income_state(output_dir, state)
     return slot
@@ -453,6 +456,7 @@ def list_income_rows(output_dir: Path) -> Dict[str, Any]:
         if "client_vat" in extra:
             scraped["client_vat"] = extra.get("client_vat")
         scraped["paid"] = bool(extra.get("paid")) if extra.get("paid") is not None else False
+        scraped["in_approx_selected"] = bool(extra.get("in_approx_selected"))
         pm = extra.get("paid_month")
         scraped["paid_month"] = pm if isinstance(pm, str) and pm.strip() else None
         pd = extra.get("payment_date")
