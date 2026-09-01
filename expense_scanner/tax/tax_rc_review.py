@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from expense_scanner.json_fs import atomic_write_json, load_json
-from expense_scanner.receipt_edit import list_month_data_files, safe_inbox_file
+from expense_scanner.store.receipt_edit import list_month_data_files, safe_inbox_file
 
 _STATE_NAME = "tax_rc_review.json"
 

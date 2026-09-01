@@ -1,8 +1,8 @@
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from expense_scanner.invoice_store import kvd_income_counts_by_month, list_income_rows
-from expense_scanner.obligations_store import build_obligations_summary, get_meta
+from expense_scanner.store.invoice_store import kvd_income_counts_by_month, list_income_rows
+from expense_scanner.store.obligations_store import build_obligations_summary, get_meta
 
 
 def _kvd_due_for_month(ym: str) -> str:

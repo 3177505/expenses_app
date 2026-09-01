@@ -3,7 +3,7 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from expense_scanner.categories import is_valid_category_id, normalize_category
+from expense_scanner.tax.categories import is_valid_category_id, normalize_category
 from expense_scanner.json_fs import atomic_write_json, load_json
 
 RULES_FILE = "merchant_category_rules.json"
@@ -98,7 +98,7 @@ def list_rules_public(output_dir: Path) -> Dict[str, Any]:
 
 
 def apply_rules_to_uncategorized(output_dir: Path) -> Dict[str, Any]:
-    from expense_scanner.receipt_edit import list_month_data_files, recalc_totals
+    from expense_scanner.store.receipt_edit import list_month_data_files, recalc_totals
 
     rules = load_rules(output_dir)
     if not rules:

@@ -1,10 +1,10 @@
 from datetime import date
-from pathlib import Path
 from typing import Any, Dict, Optional
 
+from expense_scanner.config import DATA_DIR
 from expense_scanner.json_fs import load_json
 
-_RATES_PATH = Path(__file__).with_name("cz_stravne_rates.json")
+_RATES_PATH = DATA_DIR / "cz_stravne_rates.json"
 
 
 def load_stravne_meta() -> Dict[str, Any]:

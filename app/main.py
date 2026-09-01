@@ -1,7 +1,6 @@
 import html
 import mimetypes
 from datetime import date
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 mimetypes.add_type("image/heic", ".heic")
@@ -13,22 +12,23 @@ from fastapi.staticfiles import StaticFiles
 from dateutil.relativedelta import relativedelta
 from pydantic import BaseModel
 
-from expense_scanner.categories import load_tax_categories
-from expense_scanner.cz_stravne import (
+from expense_scanner.config import REPO_ROOT
+from expense_scanner.tax.categories import load_tax_categories
+from expense_scanner.tax.cz_stravne import (
     effective_trip_amounts,
     load_stravne_meta,
     suggest_foreign_meal_allowance,
 )
-from expense_scanner.invoice_store import (
+from expense_scanner.store.invoice_store import (
     build_monthly_approx_summary,
     list_income_rows,
     patch_row,
     resolve_path_for_id,
     set_invoices_dir,
 )
-from expense_scanner.landing_notes import get_notes, set_notes
-from expense_scanner.merchant_rules import apply_rules_to_uncategorized, list_rules_public
-from expense_scanner.obligations_store import (
+from expense_scanner.store.landing_notes import get_notes, set_notes
+from expense_scanner.store.merchant_rules import apply_rules_to_uncategorized, list_rules_public
+from expense_scanner.store.obligations_store import (
     add_entry as add_obl_entry,
     build_obligations_summary as build_obl_summary,
     delete_entry as delete_obl_entry,
@@ -39,19 +39,19 @@ from expense_scanner.obligations_store import (
     set_meta_fields as set_obl_meta_fields,
     update_entry as update_obl_entry,
 )
-from expense_scanner.overview_data import build_overview, expense_czk_totals_by_month
-from expense_scanner.vat_refresh import refresh_vat_from_source_files
-from expense_scanner.pipeline import process_inbox
-from expense_scanner.reminder_schedule import build_reminder_overview
-from expense_scanner.receipt_search import search_receipts
-from expense_scanner.tax_rc_review import build_tax_rc_review, set_dismissed_receipt_id
-from expense_scanner.travel_store import (
+from expense_scanner.tax.overview_data import build_overview, expense_czk_totals_by_month
+from expense_scanner.ingest.vat_refresh import refresh_vat_from_source_files
+from expense_scanner.ingest.pipeline import process_inbox
+from expense_scanner.tax.reminder_schedule import build_reminder_overview
+from expense_scanner.store.receipt_search import search_receipts
+from expense_scanner.tax.tax_rc_review import build_tax_rc_review, set_dismissed_receipt_id
+from expense_scanner.store.travel_store import (
     add_trip,
     delete_trip,
     list_trips,
     update_trip,
 )
-from expense_scanner.receipt_edit import (
+from expense_scanner.store.receipt_edit import (
     apply_receipt_update,
     find_duplicate_receipt_groups,
     find_receipt,
@@ -60,7 +60,7 @@ from expense_scanner.receipt_edit import (
     remove_receipts_by_ids,
     safe_inbox_file,
 )
-from expense_scanner.web_i18n import (
+from app.i18n import (
     LANG_COOKIE,
     categories_i18n_json,
     dup_i18n_json,
@@ -82,7 +82,7 @@ from expense_scanner.web_i18n import (
     tr,
 )
 
-ROOT = Path(__file__).resolve().parent
+ROOT = REPO_ROOT
 OUTPUT = ROOT / "output"
 OUTPUT.mkdir(parents=True, exist_ok=True)
 
@@ -3879,4 +3879,4 @@ def api_process() -> dict:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("web_app:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)

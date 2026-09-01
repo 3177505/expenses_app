@@ -3,9 +3,9 @@ import json
 from pathlib import Path
 
 from expense_scanner.json_fs import atomic_write_json, load_json
-from expense_scanner.pipeline import process_inbox
-from expense_scanner.receipt_edit import list_month_data_files, recalc_totals
-from expense_scanner.vat_refresh import refresh_vat_from_source_files
+from expense_scanner.ingest.pipeline import process_inbox
+from expense_scanner.store.receipt_edit import list_month_data_files, recalc_totals
+from expense_scanner.ingest.vat_refresh import refresh_vat_from_source_files
 
 
 def main() -> None:

@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from expense_scanner.cnb_fx import foreign_to_czk
-from expense_scanner.invoice_scan import (
+from expense_scanner.tax.cnb_fx import foreign_to_czk
+from expense_scanner.ingest.invoice_scan import (
     default_invoices_dir,
     file_id_for_path,
     list_invoice_pdfs,

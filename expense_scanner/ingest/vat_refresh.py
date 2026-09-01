@@ -1,10 +1,10 @@
 from pathlib import Path
 from typing import Any, Dict, List
 
-from expense_scanner.extract import extract_text
+from expense_scanner.ingest.extract import extract_text
 from expense_scanner.json_fs import atomic_write_json, load_json
-from expense_scanner.parse import parse_receipt_text
-from expense_scanner.receipt_edit import (
+from expense_scanner.ingest.parse import parse_receipt_text
+from expense_scanner.store.receipt_edit import (
     list_month_data_files,
     recalc_totals,
     safe_inbox_file,

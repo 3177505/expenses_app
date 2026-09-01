@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from expense_scanner.categories import is_valid_category_id, normalize_category
+from expense_scanner.tax.categories import is_valid_category_id, normalize_category
 from expense_scanner.json_fs import atomic_write_json, load_json
 
 LEDGER_NAME = "_ledger.json"
@@ -414,7 +414,7 @@ def apply_receipt_update(
 
     if patch.get("remember_for_merchant"):
         try:
-            from expense_scanner.merchant_rules import (
+            from expense_scanner.store.merchant_rules import (
                 apply_rules_to_uncategorized,
                 set_merchant_rule,
             )

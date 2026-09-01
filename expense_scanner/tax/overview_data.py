@@ -2,17 +2,17 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from expense_scanner.categories import load_tax_categories
-from expense_scanner.cnb_fx import foreign_to_czk
-from expense_scanner.cz_stravne import effective_trip_amounts, load_stravne_meta
+from expense_scanner.tax.categories import load_tax_categories
+from expense_scanner.tax.cnb_fx import foreign_to_czk
+from expense_scanner.tax.cz_stravne import effective_trip_amounts, load_stravne_meta
 from expense_scanner.json_fs import load_json
-from expense_scanner.invoice_store import list_income_rows
-from expense_scanner.obligations_store import (
+from expense_scanner.store.invoice_store import list_income_rows
+from expense_scanner.store.obligations_store import (
     all_obligation_nav_months,
     build_obligations_summary,
 )
-from expense_scanner.receipt_edit import list_month_data_files
-from expense_scanner.travel_store import list_trips
+from expense_scanner.store.receipt_edit import list_month_data_files
+from expense_scanner.store.travel_store import list_trips
 
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 

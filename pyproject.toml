@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "expenses-app"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pymupdf>=1.24.0",
+    "Pillow>=10.4.0",
+    "pillow-heif>=0.18.0",
+    "pytesseract>=0.3.13",
+    "python-dateutil>=2.9.0",
+    "certifi>=2024.0.0",
+]
+
+[project.scripts]
+expense-scan = "expense_scanner.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["app*", "expense_scanner*"]
+
+[tool.setuptools.package-data]
+expense_scanner = ["data/*.json"]

@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from expense_scanner.json_fs import load_json
-from expense_scanner.receipt_edit import list_month_data_files
+from expense_scanner.store.receipt_edit import list_month_data_files
 
 
 def _receipt_haystack(r: Dict[str, Any]) -> str:

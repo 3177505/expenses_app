@@ -1,6 +1,7 @@
 import json
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
+
+from expense_scanner.config import DATA_DIR
 
 _bundle: Optional[Dict[str, Any]] = None
 
@@ -8,7 +9,7 @@ _bundle: Optional[Dict[str, Any]] = None
 def load_tax_categories() -> Dict[str, Any]:
     global _bundle
     if _bundle is None:
-        path = Path(__file__).with_name("cz_categories.json")
+        path = DATA_DIR / "cz_categories.json"
         _bundle = json.loads(path.read_text(encoding="utf-8"))
     return _bundle
 
