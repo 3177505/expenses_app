@@ -56,7 +56,7 @@ def suggest_foreign_meal_allowance(
         "days": days,
         "detail_cs": (
             f"{per_day:g} {cur} × {days} kal. dny "
-            f"(celé dny; 1. a poslední den lze krátit 1/3–100 % dle hodin)"
+            f"(celé dny, 1. a poslední den lze krátit dle hodin)"
         ),
     }
 

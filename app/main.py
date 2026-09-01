@@ -913,7 +913,7 @@ def tax_html(lang: str, np: str) -> str:
         for (const c of (b.categories || [])) {
           const li = document.createElement("li");
           const strong = document.createElement("strong");
-          strong.textContent = c.id + " — " + c.label_cs;
+          strong.textContent = c.id + ": " + c.label_cs;
           li.appendChild(strong);
           if (c.zdp_ref_cs) {
             li.appendChild(document.createTextNode(" "));
@@ -2395,7 +2395,7 @@ def travel_html(lang: str, np: str) -> str:
         if (j.reason === "no_rate") el.textContent = TI.noRate;
         return j;
       }
-      el.textContent = TI.suggestLbl + " " + j.total + " " + j.currency + " — " + (j.detail_cs || "");
+      el.textContent = TI.suggestLbl + " " + j.total + " " + j.currency + ". " + (j.detail_cs || "");
       return j;
     }
 
