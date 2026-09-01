@@ -1,7 +1,7 @@
 import re
 import unicodedata
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from expense_scanner.tax.categories import is_valid_category_id, normalize_category
 from expense_scanner.json_fs import atomic_write_json, load_json
@@ -90,7 +90,19 @@ def category_for_merchant(
     key = normalize_merchant_key(merchant_hint)
     if not key:
         return None
-    return rules.get(key)
+    exact = rules.get(key)
+    if exact:
+        return exact
+    matches: List[Tuple[int, str]] = []
+    for rk, cat in rules.items():
+        if len(rk) < 4:
+            continue
+        if rk in key or key in rk:
+            matches.append((len(rk), cat))
+    if not matches:
+        return None
+    matches.sort(key=lambda x: x[0], reverse=True)
+    return matches[0][1]
 
 
 def list_rules_public(output_dir: Path) -> Dict[str, Any]:
